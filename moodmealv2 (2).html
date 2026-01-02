@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MoodMeal - Food Based on Feelings</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #fff0d1, #ffd1f3);
+            text-align: center;
+            padding: 30px;
+            margin: 0;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        p.subtitle {
+            margin-top: 0;
+            color: #444;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            width: 360px;
+            margin: 20px auto;
+            border-radius: 18px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.15);
+        }
+
+        select, button {
+            width: 90%;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            font-size: 15px;
+        }
+
+        button {
+            background: #ff9f38;
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #result {
+            margin-top: 15px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff7b00;
+        }
+
+        #reason {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        .tagline {
+            font-size: 13px;
+            color: #666;
+            margin-top: 15px;
+        }
+
+        .future {
+            font-size: 12px;
+            color: #777;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🥗 MoodMeal</h1>
+<p class="subtitle">Smart food suggestions based on how you feel.</p>
+
+<div class="card">
+    <div class="tagline">Step 1: Choose your mood</div>
+    <select id="mood">
+        <option value="">How are you feeling?</option>
+        <option value="happy">😊 Happy</option>
+        <option value="sad">😔 Sad</option>
+        <option value="stressed">😣 Stressed</option>
+        <option value="tired">🥱 Tired</option>
+        <option value="focused">🎯 Need Focus</option>
+    </select>
+
+    <div class="tagline">Step 2: What do you want right now?</div>
+    <select id="goal">
+        <option value="">Select a goal</option>
+        <option value="healthy">🥦 Be Healthy</option>
+        <option value="comfort">🛋 Comfort Food</option>
+        <option value="quick">⚡ Quick & Easy</option>
+    </select>
+
+    <button onclick="suggestMeal()">Suggest a MoodMeal</button>
+
+    <div id="result"></div>
+    <div id="reason"></div>
+</div>
+
+<p class="future">
+Future version: This can connect to the school canteen menu and show<br>
+what is actually available today for your mood.
+</p>
+
+<script>
+// --- ingredient database that can generate 1000+ unique meals ---
+
+const mealParts = {
+  baseFoods: [
+    "banana bowl", "apple slices", "avocado toast", "veggie wrap", "salad bowl",
+    "yogurt parfait", "rice bowl", "pasta plate", "protein bar", 
+    "granola bowl", "sushi roll", "smoothie bowl", "veggie burger",
+    "hummus with pita", "cheese toast", "oatmeal bowl", "mixed fruit bowl"
+  ],
+
+  style: {
+    happy: [
+      "fun and colorful", "celebration style", "fresh and joyful",
+      "energy boosting", "playful mood snack"
+    ],
+    sad: [
+      "warm and comforting", "gentle mood lifting", "cozy and caring",
+      "calm and soothing", "emotion-supportive"
+    ],
+    stressed: [
+      "calming and steady", "stress-relieving", "brain calming formula",
+      "relaxation friendly", "balanced and grounding"
+    ],
+    tired: [
+      "wake-up boosting", "quick energy upgrade", "alertness boost",
+      "recharge friendly", "energy focused"
+    ],
+    focused: [
+      "brain-fueling", "concentration optimized", "memory boosting",
+      "productivity powered", "clear-mind nutrition"
+    ]
+  },
+
+  addOns: [
+    "with almonds", "with chia seeds", "with peanut butter", 
+    "with walnuts", "with dark chocolate pieces", "with fresh herbs",
+    "with cheese shavings", "with roasted vegetables", 
+    "with honey drizzle", "with lemon zest"
+  ],
+
+  categories: {
+    healthy: [
+      "light but nutritious", "keeps you energized without junk",
+      "supports health and clarity", "clean eating choice"
+    ],
+
+    comfort: [
+      "emotion friendly", "like a warm hug", 
+      "perfect for the soul", "comfort without guilt"
+    ],
+
+    quick: [
+      "ready in seconds", "quick grab food", 
+      "zero effort meal", "perfect for busy moments"
+    ]
+  }
+};
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function suggestMeal() {
+  const mood = document.getElementById("mood").value;
+  const goal = document.getElementById("goal").value;
+  const resultDiv = document.getElementById("result");
+  const reasonDiv = document.getElementById("reason");
+
+  if (!mood || !goal) {
+      resultDiv.innerHTML = "👉 Please select both mood and goal.";
+      reasonDiv.innerHTML = "";
+      return;
+  }
+
+  const meal = pick(mealParts.baseFoods) + " " + pick(mealParts.addOns);
+  const moodStyle = pick(mealParts.style[mood]);
+  const goalReason = pick(mealParts.categories[goal]);
+
+  resultDiv.innerHTML = "🍽 " + meal;
+  reasonDiv.innerHTML = `${moodStyle} — ${goalReason}.`;
+}
+</script>
+
+</body>
+</html>

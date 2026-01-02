@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MoodMeal - Food Based on Feelings</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #fff0d1, #ffd1f3);
+            text-align: center;
+            padding: 30px;
+            margin: 0;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        p.subtitle {
+            margin-top: 0;
+            color: #444;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            width: 420px;
+            margin: 20px auto;
+            border-radius: 18px;
+            box-shadow: 0 4px 18px rgba(0,0,0,0.15);
+            text-align: left;
+        }
+
+        label {
+            font-size: 14px;
+            font-weight: bold;
+            display: block;
+            margin-top: 10px;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-top: 4px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 15px;
+            border-radius: 10px;
+            border: none;
+            background: #ff9f38;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        #analysis {
+            margin-top: 15px;
+            font-size: 13px;
+            color: #555;
+        }
+
+        #result {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            color: #ff7b00;
+        }
+
+        #reason {
+            margin-top: 6px;
+            font-size: 14px;
+            color: #444;
+        }
+
+        .future {
+            font-size: 12px;
+            color: #777;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🥗 MoodMeal</h1>
+<p class="subtitle">AI-style food suggestions based on your answers.</p>
+
+<div class="card">
+    <label for="feeling">Q1. How are you feeling today?</label>
+    <textarea id="feeling" rows="2" placeholder="Example: I feel a bit tired but also relaxed..."></textarea>
+
+    <label for="rating">Q2. How much do you rate your mood on a scale of 10?</label>
+    <input id="rating" type="number" min="1" max="10" placeholder="Example: 6">
+
+    <label for="cuisine">Q3. What cuisine are you interested in eating right now?</label>
+    <input id="cuisine" type="text" placeholder="Example: Indian / Italian / Chinese / anything">
+
+    <label for="timeInput">Q4. What is the time now?</label>
+    <input id="timeInput" type="text" placeholder="Example: 8am, 1:30 pm, 19:00">
+
+    <button onclick="analyzeAndSuggest()">Analyze & Suggest Meal</button>
+
+    <div id="analysis"></div>
+    <div id="result"></div>
+    <div id="reason"></div>
+</div>
+
+<p class="future">
+Future version: The AI will read full sentences, connect to real menus and your smartwatch, and learn your habits over time.
+</p>
+
+<script>
+// ---------- Small "AI" engine (rule-based) ----------
+
+// 1) Helper to pick a random item
+function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// 2) Detect mood category from text
+function detectMoodCategory(text) {
+    const t = (text || "").toLowerCase();
+    if (t.includes("tired") || t.includes("sleepy") || t.includes("exhausted") || t.includes("lazy"))
+        return "tired";
+    if (t.includes("sad") || t.includes("down") || t.includes("upset") || t.includes("lonely") || t.includes("depressed"))
+        return "sad";
+    if (t.includes("stress") || t.includes("anxious") || t.includes("nervous") || t.includes("worried") || t.includes("overwhelmed"))
+        return "stressed";
+    if (t.includes("angry") || t.includes("mad") || t.includes("annoyed") || t.includes("frustrated"))
+        return "stressed";
+    if (t.includes("happy") || t.includes("good") || t.includes("great") || t.includes("excited") || t.includes("amazing"))
+        return "happy";
+    if (t.includes("focused") || t.includes("calm") || t.includes("ok") || t.includes("fine"))
+        return "focused";
+
+    return "neutral"; // default
+}
+
+// 3) Mood goal from rating (comfort vs healthy)
+function detectGoalFromRating(rating) {
+    if (isNaN(rating)) return "balanced";
+    if (rating <= 3) return "comfort";
+    if (rating <= 7) return "balanced";
+    return "light-healthy";
+}
+
+// 4) Detect cuisine
+function detectCuisine(text) {
+    const t = (text || "").toLowerCase();
+    if (t.includes("indian") || t.includes("biryani") || t.includes("paneer")) return "indian";
+    if (t.includes("italian") || t.includes("pizza") || t.includes("pasta")) return "italian";
+    if (t.includes("chinese") || t.includes("noodles") || t.includes("manchurian")) return "chinese";
+    if (t.includes("japanese") || t.includes("sushi") || t.includes("ramen")) return "japanese";
+    if (t.includes("mexican") || t.includes("taco") || t.includes("burrito")) return "mexican";
+    if (t.includes("american") || t.includes("burger") || t.includes("fries")) return "american";
+    if (t.includes("arab") || t.includes("middle eastern") || t.includes("shawarma") || t.includes("hummus")) return "middleeastern";
+    if (t.includes("anything") || t.includes("any") || t.includes("idc") || t.includes("dont care")) return "any";
+    return "any"; // generic
+}
+
+// 5) Detect time slot (breakfast/lunch/dinner/snack)
+function detectTimeSlot(text) {
+    const t = (text || "").toLowerCase();
+    let hourMatch = t.match(/(\d{1,2})/); // first number
+    if (!hourMatch) return "snack";
+
+    let hour = parseInt(hourMatch[1], 10);
+
+    if (t.includes("pm") && hour < 12) hour += 12;
+    if (t.includes("am") && hour === 12) hour = 0;
+
+    if (hour >= 5 && hour < 11) return "breakfast";
+    if (hour >= 11 && hour < 16) return "lunch";
+    if (hour >= 16 && hour < 19) return "snack";
+    if (hour >= 19 && hour <= 23) return "dinner";
+    return "snack";
+}
+
+// 6) Meal database by cuisine + time
+const mealsByCuisine = {
+    indian: {
+        breakfast: [
+            "Masala dosa with sambar",
+            "Idli with coconut chutney",
+            "Poha with peanuts",
+            "Aloo paratha with curd"
+        ],
+        lunch: [
+            "Veg biryani with raita",
+            "Paneer butter masala with roti",
+            "Dal tadka with jeera rice",
+            "Chole bhature (light portion)"
+        ],
+        dinner: [
+            "Tandoori roti with dal makhani",
+            "Veg pulao with salad",
+            "Stuffed paratha with curd"
+        ],
+        snack: [
+            "Samosa with mint chutney",
+            "Bhel puri",
+            "Masala chai with biscuits",
+            "Paneer tikka"
+        ]
+    },
+    italian: {
+        breakfast: [
+            "Tomato & cheese bruschetta",
+            "Veg omelette with toast",
+            "Fruit and yogurt bowl"
+        ],
+        lunch: [
+            "Margherita pizza (thin crust)",
+            "Penne arrabbiata pasta",
+            "Veg lasagna"
+        ],
+        dinner: [
+            "Pesto pasta with veggies",
+            "Creamy mushroom spaghetti",
+            "Grilled vegetable panini"
+        ],
+        snack: [
+            "Garlic bread",
+            "Cheese sticks",
+            "Mini pizza slices"
+        ]
+    },
+    chinese: {
+        breakfast: [
+            "Veg fried rice (light portion)",
+            "Steamed dumplings",
+            "Veg soup and toast"
+        ],
+        lunch: [
+            "Hakka noodles with veggies",
+            "Veg manchurian with rice",
+            "Chilli paneer with fried rice"
+        ],
+        dinner: [
+            "Hot and sour soup with noodles",
+            "Garlic rice with stir-fry veggies"
+        ],
+        snack: [
+            "Spring rolls",
+            "Crispy corn",
+            "Dumpling platter"
+        ]
+    },
+    japanese: {
+        breakfast: [
+            "Miso soup with rice",
+            "Tamago (egg) with rice"
+        ],
+        lunch: [
+            "Veg sushi platter",
+            "Ramen bowl with veggies"
+        ],
+        dinner: [
+            "Teriyaki tofu with rice",
+            "Veg udon noodles"
+        ],
+        snack: [
+            "Edamame beans",
+            "Rice crackers"
+        ]
+    },
+    mexican: {
+        breakfast: [
+            "Breakfast burrito (veg)",
+            "Scrambled eggs with salsa"
+        ],
+        lunch: [
+            "Veg burrito bowl",
+            "Bean and cheese quesadilla",
+            "Soft tacos with veggies"
+        ],
+        dinner: [
+            "Cheesy enchiladas",
+            "Grilled veggies with Mexican rice"
+        ],
+        snack: [
+            "Nachos with salsa & cheese",
+            "Chips with guacamole"
+        ]
+    },
+    american: {
+        breakfast: [
+            "Pancakes with honey",
+            "Scrambled eggs and toast",
+            "Oatmeal with fruits"
+        ],
+        lunch: [
+            "Veg burger with fries (small)",
+            "Mac and cheese",
+            "Grilled cheese sandwich"
+        ],
+        dinner: [
+            "Veggie burger with salad",
+            "Roasted veggies with mashed potatoes"
+        ],
+        snack: [
+            "French fries (small)",
+            "Potato wedges",
+            "Popcorn"
+        ]
+    },
+    middleeastern: {
+        breakfast: [
+            "Hummus with warm pita",
+            "Labneh with olives and bread"
+        ],
+        lunch: [
+            "Falafel wrap",
+            "Veg shawarma",
+            "Rice with grilled veggies"
+        ],
+        dinner: [
+            "Hummus bowl with salad and pita",
+            "Stuffed grape leaves with rice"
+        ],
+        snack: [
+            "Falafel balls with tahini",
+            "Pita chips with hummus"
+        ]
+    },
+    any: {
+        breakfast: [
+            "Fruit and yogurt bowl",
+            "Oatmeal with nuts and honey",
+            "Peanut butter toast with banana slices"
+        ],
+        lunch: [
+            "Grilled veggie sandwich",
+            "Rice bowl with veggies and beans",
+            "Simple dal and rice with salad"
+        ],
+        dinner: [
+            "Veg stir-fry with rice",
+            "Light pasta with veggies",
+            "Soup with garlic bread"
+        ],
+        snack: [
+            "Mixed nuts and dry fruits",
+            "Fruit bowl",
+            "Granola bar",
+            "Dark chocolate and nuts"
+        ]
+    }
+};
+
+// 7) Reason templates based on mood + goal
+const moodReasons = {
+    happy: "keeps your good mood going without making you feel too heavy.",
+    sad: "is comforting and can gently lift your mood.",
+    stressed: "is calming and steady, helping your brain relax while you eat.",
+    tired: "gives you a clean energy boost without a crash.",
+    focused: "supports your brain so you can stay focused and clear.",
+    neutral: "keeps your energy stable and balanced."
+};
+
+const goalReasons = {
+    comfort: "Because your mood score is low, a slightly comforting meal is a good idea.",
+    balanced: "With a mid-level mood, a balanced meal keeps you steady.",
+    "light-healthy": "Since your mood score is high, a lighter healthy meal will keep you feeling great.",
+    default: "This is a balanced choice for your current mood."
+};
+
+// 8) Main function
+function analyzeAndSuggest() {
+    const feeling = document.getElementById("feeling").value;
+    const rating = parseInt(document.getElementById("rating").value, 10);
+    const cuisineText = document.getElementById("cuisine").value;
+    const timeText = document.getElementById("timeInput").value;
+
+    const analysisDiv = document.getElementById("analysis");
+    const resultDiv = document.getElementById("result");
+    const reasonDiv = document.getElementById("reason");
+
+    if (!feeling && !cuisineText && !timeText) {
+        resultDiv.innerHTML = "";
+        reasonDiv.innerHTML = "";
+        analysisDiv.innerHTML = "👉 Please answer the questions so MoodMeal can analyze you.";
+        return;
+    }
+
+    const moodCategory = detectMoodCategory(feeling);
+    const goal = detectGoalFromRating(rating);
+    const cuisineKey = detectCuisine(cuisineText);
+    const timeSlot = detectTimeSlot(timeText);
+
+    const cuisineData = mealsByCuisine[cuisineKey] || mealsByCuisine.any;
+    const dishList = cuisineData[timeSlot] || mealsByCuisine.any[timeSlot];
+    const dish = pick(dishList);
+
+    analysisDiv.innerHTML =
+        `<strong>AI Analysis:</strong><br>
+        Mood detected: <b>${moodCategory}</b><br>
+        Mood score: <b>${isNaN(rating) ? "not given" : rating + "/10"}</b><br>
+        Cuisine matched: <b>${cuisineKey}</b><br>
+        Meal time understood as: <b>${timeSlot}</b>`;
+
+    resultDiv.innerHTML = `🍽 Recommended meal: <br><span>${dish}</span>`;
+
+    const moodReason = moodReasons[moodCategory] || moodReasons.neutral;
+    const goalReason = goalReasons[goal] || goalReasons.default;
+
+    reasonDiv.innerHTML =
+        `${dish} ${moodReason}<br>${goalReason}`;
+}
+</script>
+
+</body>
+</html>

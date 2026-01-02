@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>AuraLens — Data Collector</title>
+<style>
+  body{font-family:Arial;margin:20px;background:#0b1220;color:#eee}
+  button{padding:10px;margin:6px;border-radius:8px}
+  .labels button{min-width:90px}
+  video, canvas{border-radius:8px;background:#000;display:block}
+  .controls{margin-top:10px}
+</style>
+</head>
+<body>
+<h2>AuraLens — Data Collector</h2>
+<p>Open camera, choose a label, and click capture. Collect many images per label.</p>
+
+<video id="video" width="480" height="360" autoplay playsinline></video>
+<canvas id="canvas" width="480" height="360" style="display:none"></canvas>
+
+<div class="controls">
+  <button id="start">Open Camera</button>
+  <button id="download">Download ZIP</button>
+  <label>Frames per capture: <input id="burst" type="number" value="3" min="1" max="10" style="width:60px"/></label>
+</div>
+
+<div class="labels">
+  <h4>Labels</h4>
+  <button data-label="happy">Happy</button>
+  <button data-label="sad">Sad</button>
+  <button data-label="angry">Angry</button>
+  <button data-label="tired">Tired</button>
+  <button data-label="neutral">Neutral</button>
+</div>
+
+<div id="counts"></div>
+
+<script>
+// Simple client-side capture and ZIP creation
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const start = document.getElementById('start');
+const download = document.getElementById('download');
+const burst = document.getElementById('burst');
+const counts = document.getElementById('counts');
+
+let stream;
+const images = {}; // {label: [dataURL,...]}
+function updateCounts(){
+  counts.innerHTML = Object.entries(images).map(([k,v])=>`${k}: ${v.length}`).join(' • ');
+}
+start.onclick = async ()=>{
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+    video.srcObject = stream;
+    await video.play();
+  }catch(e){ alert('Camera permission denied or no camera.'); console.error(e); }
+};
+
+document.querySelectorAll('.labels button').forEach(b=>{
+  b.onclick = async ()=>{
+    if(!stream){ alert('Open camera first'); return; }
+    const label = b.dataset.label;
+    images[label] = images[label] || [];
+    const bcount = Math.max(1, Number(burst.value)||1);
+    for(let i=0;i<bcount;i++){
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const data = canvas.toDataURL('image/jpeg', 0.85);
+      images[label].push(data);
+      await new Promise(r=>setTimeout(r, 200)); // tiny delay
+    }
+    updateCounts();
+  };
+});
+
+download.onclick = async ()=>{
+  // create zip in browser using JSZip (no external network) — include fallback to download JSON
+  if(Object.keys(images).length===0){ alert('No images to download'); return; }
+  // Build a workaround zip-less download: create a JSON with base64 arrays
+  const payload = JSON.stringify(images);
+  const blob = new Blob([payload], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'auralens_images.json';
+  a.click();
+  URL.revokeObjectURL(url);
+  alert('Downloaded aurals_images.json (contains base64 images). You can extract and convert for training.');
+};
+</script>
+</body>
+</html>

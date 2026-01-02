@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AuraLens — Camera + face-api.js (Improved)</title>
+<style>
+  :root{ --bg1:#061226; --bg2:#081734; --card:#0b1320; --accent:#ff7a18; --muted:#9fb0d6; --glass: rgba(255,255,255,0.03); color-scheme: dark; }
+  body{ font-family: Inter, system-ui, Arial, sans-serif; background: linear-gradient(135deg,var(--bg1),var(--bg2)); color:#e6eef8; margin:0; padding:20px; display:flex; justify-content:center; }
+  .wrap{ width:980px; max-width:98%; }
+  header{ display:flex; gap:12px; align-items:center; margin-bottom:16px; }
+  .logo{ width:54px; height:54px; border-radius:12px; background:linear-gradient(135deg,#8b5cf6,#06b6d4); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:20px; }
+  h1{ margin:0; font-size:20px; }
+  .card{ background:var(--card); padding:14px; border-radius:12px; box-shadow: 0 8px 30px rgba(2,6,23,0.6); display:flex; gap:14px; flex-wrap:wrap; }
+  .left{ flex:1 1 540px; }
+  .right{ flex:0 0 360px; }
+  .controls{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  button{ padding:10px 12px; background:linear-gradient(90deg,var(--accent),#06b6d4); border:none; color:white; border-radius:10px; font-weight:700; cursor:pointer; }
+  button.ghost{ background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted); }
+  .panel{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px; border-radius:10px; min-height:220px; }
+  .tag{ display:inline-block; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.03); margin:6px 6px 0 0; font-size:12px; color:var(--muted); }
+  .emotion{ font-size:20px; font-weight:800; color:#fff; }
+  .score{ font-size:18px; font-weight:800; margin-top:6px; color:var(--accent); }
+  .tips{ margin-top:12px; display:flex; flex-direction:column; gap:8px; }
+  .tip{ background:rgba(255,255,255,0.02); padding:10px; border-radius:8px; font-size:13px; }
+  .video-wrap{ border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; align-items:center; background:rgba(0,0,0,0.12); }
+  video, canvas{ border-radius:8px; max-width:100%; height:auto; display:block; }
+  .small{ font-size:12px; color:var(--muted); margin-top:8px; }
+  footer{ text-align:center; color:var(--muted); margin-top:12px; font-size:12px; }
+  @media (max-width:920px){ .right{ order:2; width:100% } .left{ order:1; width:100% } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">AL</div>
+    <div>
+      <h1>AuraLens — Improved Camera Emotion Detector</h1>
+      <div class="small">Using face-api.js expressions — more accurate than smile-only heuristics.</div>
+    </div>
+  </header>
+
+  <div class="card" role="application" aria-label="AuraLens camera emotion scanner">
+    <div class="left">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="small">Live Camera</div>
+          <div id="modelStatus" class="small">Models: not loaded</div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <div class="controls">
+            <button id="openCam">Open Camera</button>
+            <button id="snapshotBtn" disabled>Snapshot</button>
+            <button id="detectBtn" disabled>Detect</button>
+            <button id="closeCam" class="ghost" disabled>Close Camera</button>
+          </div>
+        </div>
+
+        <div style="margin-top:10px;">
+          <div class="video-wrap" id="videoWrap">
+            <video id="video" autoplay playsinline width="640" height="480" style="background:#000;border-radius:8px;"></video>
+            <canvas id="canvas" width="640" height="480" style="display:none;"></canvas>
+          </div>
+        </div>
+
+        <div class="small">Tip: good lighting gives better detection. You can snapshot and detect repeatedly — results update each time.</div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div class="tag">Detected: <span id="detectTag">—</span></div>
+          <div class="tag">Source: camera</div>
+        </div>
+
+        <div style="margin-top:8px;">
+          <div class="emotion" id="emotionName">—</div>
+          <div class="score" id="emotionScore">—</div>
+          <div class="small" id="emotionReason">No detection yet.</div>
+        </div>
+
+        <div id="tipsArea" class="tips" style="display:none;">
+          <div class="tip" id="tip1">Tip 1</div>
+          <div class="tip" id="tip2">Tip 2</div>
+          <div class="tip" id="tip3">Tip 3</div>
+        </div>
+
+        <div id="confidence" class="small" style="margin-top:10px;color:var(--muted)"></div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="exportBtn" class="ghost">Copy Analysis</button>
+          <button id="saveNote" class="ghost">Save to Notes</button>
+        </div>
+      </div>
+
+      <div style="height:12px;"></div>
+      <div class="panel">
+        <div class="small">Settings</div>
+        <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+          <label class="small">Confidence threshold:
+            <input id="confInput" type="number" min="30" max="95" value="55" style="width:64px; margin-left:8px;">
+          </label>
+          <label class="small" style="margin-left:10px;">Override:
+            <select id="overrideSelect" style="margin-left:8px;">
+              <option value="">—</option>
+              <option value="happy">Happy</option>
+              <option value="sad">Sad</option>
+              <option value="angry">Angry</option>
+              <option value="neutral">Neutral</option>
+              <option value="surprised">Surprised</option>
+              <option value="fearful">Fearful</option>
+              <option value="disgusted">Disgusted</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <footer>Models load from CDN — allow camera & wait a few seconds for models to load the first time.</footer>
+</div>
+
+<!-- face-api.js -->
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<script>
+(async function(){
+  const MODEL_URL = 'https://justadudewhohacks.github.io/face-api.js/models/';
+
+  // UI elements
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const openCam = document.getElementById('openCam');
+  const snapshotBtn = document.getElementById('snapshotBtn');
+  const detectBtn = document.getElementById('detectBtn');
+  const closeCam = document.getElementById('closeCam');
+  const modelStatus = document.getElementById('modelStatus');
+  const detectTag = document.getElementById('detectTag');
+  const emotionName = document.getElementById('emotionName');
+  const emotionScore = document.getElementById('emotionScore');
+  const emotionReason = document.getElementById('emotionReason');
+  const tipsArea = document.getElementById('tipsArea');
+  const tip1 = document.getElementById('tip1');
+  const tip2 = document.getElementById('tip2');
+  const tip3 = document.getElementById('tip3');
+  const confInput = document.getElementById('confInput');
+  const overrideSelect = document.getElementById('overrideSelect');
+  const exportBtn = document.getElementById('exportBtn');
+  const saveNote = document.getElementById('saveNote');
+  const confidenceDiv = document.getElementById('confidence');
+
+  let stream = null;
+  let lastRecord = null;
+
+  // emotion tips map
+  const meta = {
+    happy:{tips:["Celebrate small wins.","Short active break.","Share positivity."], reason:"Positive mood — good for collaboration."},
+    sad:{tips:["5-minute breathing.","Talk to someone.","Comforting routine."], reason:"Low mood — gentle routine."},
+    angry:{tips:["Pause & breathe.","Write one sentence about it.","Short walk."], reason:"High arousal — de-escalation."},
+    neutral:{tips:["Good for focused work.","Use deep work intervals.","Hydrate."], reason:"Balanced state."},
+    surprised:{tips:["Take a moment to reflect.","Note the trigger."], reason:"Unexpected reaction."},
+    fearful:{tips:["Slow breathing.","Identify safety.","Talk to someone."], reason:"Stress response — address safety."},
+    disgusted:{tips:["Step back from source.","Take a break.","Reassess environment."], reason:"Aversive reaction."}
+  };
+
+  // load models
+  modelStatus.textContent = 'Loading models...';
+  try{
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    modelStatus.textContent = 'Models loaded';
+  }catch(e){
+    console.error('model load failed', e);
+    modelStatus.textContent = 'Model load failed';
+  }
+
+  // camera helpers
+  async function openCamera(){
+    try{
+      if(stream) stream.getTracks().forEach(t=>t.stop());
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio:false });
+      video.srcObject = stream;
+      await video.play();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      snapshotBtn.disabled = false;
+      detectBtn.disabled = true; // enable after snapshot
+      closeCam.disabled = false;
+    }catch(e){
+      alert('Could not open camera — check permissions.');
+      console.error(e);
+    }
+  }
+
+  function closeCamera(){
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+    video.pause();
+    snapshotBtn.disabled = true;
+    detectBtn.disabled = true;
+    closeCam.disabled = true;
+    detectTag.textContent = '—';
+    emotionName.textContent = '—';
+    emotionScore.textContent = '—';
+    emotionReason.textContent = 'No detection yet.';
+    tipsArea.style.display = 'none';
+    confidenceDiv.textContent = '';
+    ctx.clearRect(0,0,canvas.width, canvas.height);
+  }
+
+  function snapshot(){
+    if(!stream){ alert('Open camera first.'); return; }
+    canvas.style.display = 'block';
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    detectBtn.disabled = false;
+    // reset previous outputs so repeated detection always updates
+    detectTag.textContent = '—';
+    emotionName.textContent = '—';
+    emotionScore.textContent = '—';
+    emotionReason.textContent = 'Ready to detect.';
+    tipsArea.style.display = 'none';
+    confidenceDiv.textContent = '';
+  }
+
+  async function detectFromCanvas(){
+    if(!canvas || canvas.width === 0) { alert('Please snapshot first.'); return; }
+    if(!faceapi.nets.faceExpressionNet.params) { alert('Models not loaded yet.'); return; }
+
+    // run face-api detectSingleFace on the canvas element
+    const options = new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.3 });
+    try{
+      const detection = await faceapi.detectSingleFace(canvas, options).withFaceLandmarks().withFaceExpressions();
+      if(!detection){
+        detectTag.textContent = 'NO FACE';
+        emotionName.textContent = '—';
+        emotionScore.textContent = '—';
+        emotionReason.textContent = 'No face detected — try again with better lighting or position.';
+        tipsArea.style.display = 'none';
+        confidenceDiv.textContent = '';
+        return;
+      }
+
+      // get expression scores
+      const ex = detection.expressions;
+      const sorted = Object.entries(ex).sort((a,b)=>b[1]-a[1]);
+      let [topEmotion, topScore] = sorted[0]; // 'happy', 'sad', etc
+      topScore = Math.round(topScore * 100); // percentage
+
+      // map 'neutral' vs 'tired' -- face-api doesn't output 'tired'; leave as neutral
+      // user override
+      const override = overrideSelect.value;
+      if(override) topEmotion = override;
+
+      // apply threshold
+      const threshold = Number(confInput.value) || 55;
+      const accepted = topScore >= threshold;
+
+      detectTag.textContent = accepted ? topEmotion.toUpperCase() : 'UNCERTAIN';
+      emotionName.textContent = topEmotion.charAt(0).toUpperCase() + topEmotion.slice(1);
+      emotionScore.textContent = topScore + '%';
+      const m = meta[topEmotion] || {tips:["Take a short break."], reason:"Observed expression."};
+      emotionReason.textContent = m.reason;
+      tip1.textContent = "• " + (m.tips[0] || '');
+      tip2.textContent = "• " + (m.tips[1] || '');
+      tip3.textContent = "• " + (m.tips[2] || '');
+      tipsArea.style.display = 'flex';
+      confidenceDiv.textContent = 'Top scores: ' + sorted.slice(0,4).map(s=>`${s[0]} ${Math.round(s[1]*100)}%`).join(' • ');
+
+      // draw box for visual feedback
+      const box = detection.detection.box;
+      const ctxOverlay = canvas.getContext('2d');
+      ctxOverlay.strokeStyle = '#ffebc8';
+      ctxOverlay.lineWidth = Math.max(2, Math.round(Math.min(canvas.width, canvas.height)/200));
+      ctxOverlay.strokeRect(box.x, box.y, box.width, box.height);
+
+      // store lastRecord if accepted
+      if(accepted){
+        lastRecord = { emotion: topEmotion, score: topScore, at: new Date().toISOString() };
+        saveToHistory(lastRecord);
+      }
+    }catch(err){
+      console.error('Detection error', err);
+      alert('Detection failed (see console).');
+    }
+  }
+
+  // local history
+  function saveToHistory(record){
+    const k = 'auralens_faceapi_history';
+    const arr = JSON.parse(localStorage.getItem(k) || '[]');
+    arr.unshift(record);
+    if(arr.length > 50) arr.pop();
+    localStorage.setItem(k, JSON.stringify(arr));
+    renderHistory();
+  }
+  function renderHistory(){
+    const k = 'auralens_faceapi_history';
+    const arr = JSON.parse(localStorage.getItem(k) || '[]');
+    let html = '<div class="small">History</div>';
+    html += '<div style="max-height:200px;overflow:auto;margin-top:6px;">';
+    arr.forEach(r=>{
+      html += `<div style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;">${new Date(r.at).toLocaleString()} — ${r.emotion.toUpperCase()} ${r.score}%</div>`;
+    });
+    html += '</div>';
+    // append to right panel below existing tips/confidence (simple injection)
+    // We'll put it after the panel by adding into document body if present
+    const existing = document.getElementById('histPanel');
+    if(existing){ existing.remove(); }
+    const div = document.createElement('div');
+    div.id = 'histPanel';
+    div.style.marginTop = '10px';
+    div.innerHTML = html;
+    document.querySelector('.right .panel').appendChild(div);
+  }
+  renderHistory();
+
+  // export & save buttons
+  exportBtn.addEventListener('click', ()=>{
+    const a = lastRecord || JSON.parse(localStorage.getItem('auralens_faceapi_history')||'[]')[0];
+    if(!a) return alert('No detection to export (try detect with a lower threshold).');
+    const out = `AuraLens analysis\nMood: ${a.emotion}\nScore: ${a.score}%\nTime: ${new Date(a.at).toLocaleString()}\nSource: face-api.js\n(Prototype estimate)`;
+    navigator.clipboard?.writeText(out).then(()=>alert('Analysis copied to clipboard.'));
+  });
+  saveNote.addEventListener('click', ()=>{
+    const a = lastRecord || JSON.parse(localStorage.getItem('auralens_faceapi_history')||'[]')[0];
+    if(!a) return alert('No detection to save.');
+    const k = 'auralens_faceapi_notes';
+    const arr = JSON.parse(localStorage.getItem(k) || '[]');
+    arr.unshift({...a, savedAt: new Date().toISOString()});
+    localStorage.setItem(k, JSON.stringify(arr));
+    alert('Saved to local notes.');
+  });
+
+  // wire UI
+  openCam.addEventListener('click', openCamera);
+  closeCam.addEventListener('click', closeCamera);
+  snapshotBtn.addEventListener('click', snapshot);
+  detectBtn.addEventListener('click', detectFromCanvas);
+
+  // cleanup
+  window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
+
+})();
+</script>
+</body>
+</html>

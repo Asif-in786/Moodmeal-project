@@ -1,0 +1,316 @@
+from pathlib import Path
+
+html = r'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AuraLens v3 — Camera-only Emotion Scanner</title>
+<style>
+  :root{
+    --bg1:#071024; --bg2:#06213b; --card:#071427;
+    --accent:#ff7a18; --muted:#9fb0d6; --glass: rgba(255,255,255,0.03);
+    color-scheme: dark;
+  }
+  html,body{height:100%}
+  body{
+    font-family: Inter, system-ui, Arial, sans-serif;
+    background: linear-gradient(135deg,var(--bg1),var(--bg2));
+    color: #e6eef8; margin:0; padding:20px; box-sizing:border-box;
+    display:flex; align-items:flex-start; justify-content:center;
+  }
+  .wrap{ width:980px; max-width:98%; }
+  header{ display:flex; align-items:center; gap:14px; margin-bottom:18px;}
+  .logo{ width:56px; height:56px; border-radius:12px; background:linear-gradient(135deg,#8b5cf6,#06b6d4);
+         display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px; }
+  h1{ margin:0; font-size:22px; }
+  p.lead{ margin:2px 0 0 0; color:var(--muted); font-size:13px; }
+
+  .card{ background:var(--card); padding:14px; border-radius:12px; box-shadow: 0 10px 40px rgba(2,6,23,0.6); display:flex; gap:16px; flex-wrap:wrap; }
+  .left{ flex:1 1 420px; min-width:260px; }
+  .right{ flex:0 0 360px; min-width:260px; }
+
+  .row{ display:flex; gap:8px; align-items:center; margin-top:8px; }
+  button{ margin-top:10px; padding:10px 12px; background:linear-gradient(90deg,var(--accent),#06b6d4); border:none; color:white; border-radius:10px; font-weight:700; cursor:pointer;}
+  .small{ font-size:12px; color:var(--muted); margin-top:8px; }
+
+  .panel{ background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px; border-radius:10px; min-height:220px; }
+  .tag{ display:inline-block; padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.03); margin:6px 6px 0 0; font-size:12px; color:var(--muted); }
+  .emotion{ font-size:20px; font-weight:800; color:#fff; }
+  .score{ font-size:24px; font-weight:900; margin-top:6px; color:var(--accent); }
+  .reason{ margin-top:10px; color:var(--muted); font-size:13px; }
+  .tips{ margin-top:12px; display:flex; flex-direction:column; gap:8px;}
+  .tip{ background:rgba(255,255,255,0.02); padding:10px; border-radius:8px; font-size:13px; }
+
+  .video-wrap{ background:rgba(0,0,0,0.25); border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; align-items:center; }
+  video, canvas{ border-radius:8px; max-width:100%; height:auto; display:block; }
+  .controls{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+
+  footer{ text-align:center; color:var(--muted); margin-top:14px; font-size:12px; }
+
+  @media (max-width:920px){
+    .card{ padding:12px; }
+    .right{ order:2 }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">AL</div>
+      <div>
+        <h1>AuraLens v3</h1>
+        <p class="lead">Camera-only emotion scanner — quick demo for presentations.</p>
+      </div>
+    </header>
+
+    <div class="card" role="application" aria-label="AuraLens camera emotion scanner">
+      <div class="left">
+        <p class="small">Use the camera to scan your face and get an instant emotion estimate with tips. No text input required.</p>
+        <div class="row">
+          <button id="openCam">Open Camera</button>
+          <button id="captureBtn" disabled>Capture</button>
+          <button id="scanFaceBtn" disabled>Scan Face</button>
+          <button id="closeCam" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);" disabled>Close Camera</button>
+        </div>
+
+        <div class="small" style="margin-top:8px">Best in good lighting. If browser doesn't support FaceDetector, a fallback box is used.</div>
+      </div>
+
+      <div class="right">
+        <div class="panel">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="tag">Detected: <span id="detectTag">—</span></div>
+            <div id="sourceTag" class="tag">Source: camera</div>
+          </div>
+
+          <div style="margin-top:8px;">
+            <div class="emotion" id="emotionName">—</div>
+            <div class="score" id="emotionScore">—</div>
+            <div class="reason" id="emotionReason">No scan yet. Open camera and capture a selfie to begin.</div>
+          </div>
+
+          <div id="tipsArea" class="tips" style="display:none;">
+            <div class="tip" id="tip1">Tip 1</div>
+            <div class="tip" id="tip2">Tip 2</div>
+            <div class="tip" id="tip3">Tip 3</div>
+          </div>
+
+          <div id="confidence" style="margin-top:10px;color:var(--muted);font-size:12px;"></div>
+
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+            <button id="exportBtn" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px;border-radius:8px;cursor:pointer;">Copy Analysis</button>
+            <button id="saveNote" style="background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);padding:8px;border-radius:8px;cursor:pointer;">Save to Notes</button>
+          </div>
+        </div>
+
+        <div style="height:12px;"></div>
+
+        <div class="video-wrap" id="camPanel" style="display:none;">
+          <video id="video" autoplay playsinline width="320" height="240"></video>
+          <canvas id="snap" width="320" height="240" style="display:none;"></canvas>
+          <div id="faceStatus" class="small" style="margin-top:6px;color:var(--muted);">Camera closed.</div>
+        </div>
+
+      </div>
+    </div>
+
+    <footer>
+      AuraLens v3 — camera-only prototype • No external services.
+    </footer>
+  </div>
+
+<script>
+/* Camera-only AuraLens v3: face scan -> emotion -> tips */
+const video = document.getElementById('video');
+const snap = document.getElementById('snap');
+const ctx = snap.getContext('2d');
+const faceStatus = document.getElementById('faceStatus');
+
+const emotions = [
+  {key:'happy', tips:[
+      "Keep the momentum — celebrate small wins.",
+      "Short active break keeps energy high.",
+      "Share positivity with peers."
+    ], reason:"Positive mood — high engagement potential."},
+  {key:'sad', tips:[
+      "Try a 5-minute breathing break.",
+      "Reach out to someone you trust.",
+      "Comforting routine helps — warm drink or light walk."
+    ], reason:"Low mood — gentle, soothing actions recommended."},
+  {key:'stressed', tips:[
+      "Try box-breathing for 2 minutes.",
+      "Break tasks into short chunks.",
+      "Step outside for fresh air to reset."
+    ], reason:"High stress — prioritize calming & short tasks."},
+  {key:'tired', tips:[
+      "Short power nap (10–20 mins) if possible.",
+      "Hydrate and do light movement for alertness.",
+      "Choose a light snack high in protein or fruit."
+    ], reason:"Low energy — restore before demanding tasks."},
+  {key:'neutral', tips:[
+      "You're steady — good for focused work.",
+      "Use deep work intervals (25–50 mins).",
+      "Keep hydrated and take short breaks."
+    ], reason:"Neutral mood — balanced choices recommended."}
+];
+
+let stream = null;
+let latestFace = null;
+
+/* Camera controls */
+async function openCamera(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+    video.srcObject = stream;
+    document.getElementById('camPanel').style.display = 'block';
+    faceStatus.textContent = 'Camera active. Capture a photo to scan face.';
+    document.getElementById('captureBtn').disabled = false;
+    document.getElementById('scanFaceBtn').disabled = true;
+    document.getElementById('closeCam').disabled = false;
+  }catch(e){
+    alert('Could not open camera. Check permissions or try a different browser.');
+    console.error(e);
+  }
+}
+
+function closeCamera(){
+  if(stream){
+    stream.getTracks().forEach(t=>t.stop());
+    stream = null;
+  }
+  document.getElementById('camPanel').style.display = 'none';
+  faceStatus.textContent = 'Camera closed.';
+  document.getElementById('captureBtn').disabled = true;
+  document.getElementById('scanFaceBtn').disabled = true;
+  document.getElementById('closeCam').disabled = true;
+}
+
+document.getElementById('openCam').addEventListener('click', openCamera);
+document.getElementById('closeCam').addEventListener('click', closeCamera);
+
+/* capture */
+document.getElementById('captureBtn').addEventListener('click', ()=>{
+  if(!stream){ alert('Open the camera first.'); return;}
+  snap.style.display = 'block';
+  snap.width = video.videoWidth || 320;
+  snap.height = video.videoHeight || 240;
+  ctx.drawImage(video, 0, 0, snap.width, snap.height);
+  faceStatus.textContent = 'Snapshot captured. Click "Scan Face" to analyze.';
+  document.getElementById('scanFaceBtn').disabled = false;
+});
+
+/* naive smile detection using bright pixel ratio in lower face */
+function naiveSmileEstimate(faceBox){
+  try{
+    const imgData = ctx.getImageData(faceBox.x, faceBox.y + Math.floor(faceBox.height*0.5), faceBox.width, Math.floor(faceBox.height*0.35));
+    const data = imgData.data;
+    let bright = 0, total = 0;
+    for(let i=0;i<data.length;i+=4){
+      const r = data[i], g = data[i+1], b = data[i+2];
+      const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+      if(lum > 180) bright++;
+      total++;
+    }
+    const ratio = bright/total;
+    return ratio;
+  }catch(e){
+    return 0;
+  }
+}
+
+/* face detection */
+async function scanFaceFromCanvas(){
+  if(snap.style.display === 'none'){
+    alert('Please capture an image first.');
+    return null;
+  }
+  if('FaceDetector' in window){
+    try{
+      const detector = new FaceDetector({fastMode:true, maxDetectedFaces:1});
+      const faces = await detector.detect(snap);
+      if(faces && faces.length>0){
+        const f = faces[0].boundingBox;
+        return {found:true, box: {x:Math.max(0, Math.floor(f.x)), y:Math.max(0, Math.floor(f.y)), width:Math.floor(f.width), height:Math.floor(f.height)} , source:'facedetector'};
+      }else{
+        return {found:false};
+      }
+    }catch(err){
+      console.warn('FaceDetector error', err);
+    }
+  }
+  const w = snap.width, h = snap.height;
+  const box = {x: Math.floor(w*0.2), y: Math.floor(h*0.15), width: Math.floor(w*0.6), height: Math.floor(h*0.6)};
+  return {found:true, box, source:'fallback'};
+}
+
+/* scan & map to simple emotions */
+document.getElementById('scanFaceBtn').addEventListener('click', async ()=>{
+  const res = await scanFaceFromCanvas();
+  if(!res || !res.found){
+    faceStatus.textContent = 'No face detected. Try a clearer selfie or better lighting.';
+    return;
+  }
+  faceStatus.textContent = `Face detected (${res.source}). Estimating emotion...`;
+  const ratio = naiveSmileEstimate(res.box);
+  // map ratio to emotion heuristics
+  let faceEmotion = 'neutral';
+  if(ratio > 0.07) faceEmotion = 'happy';
+  else if(ratio > 0.03) faceEmotion = 'neutral';
+  else faceEmotion = 'neutral';
+  latestFace = {found:true, box:res.box, source:res.source, smileRatio: ratio, emotion: faceEmotion};
+  faceStatus.textContent = `Face scan done — estimated: ${faceEmotion} (smile ratio ${Math.round(ratio*1000)/1000}).`;
+  // draw rectangle
+  ctx.strokeStyle = '#ffebc8';
+  ctx.lineWidth = Math.max(2, Math.round(Math.min(snap.width, snap.height)/150));
+  ctx.strokeRect(res.box.x, res.box.y, res.box.width, res.box.height);
+  // present
+  presentAnalysisFromFace(latestFace);
+});
+
+/* present results */
+function presentAnalysisFromFace(face){
+  const meta = emotions.find(e=>e.key===face.emotion) || emotions.find(e=>e.key==='neutral');
+  document.getElementById('detectTag').textContent = face.emotion.toUpperCase();
+  document.getElementById('emotionName').textContent = face.emotion.charAt(0).toUpperCase() + face.emotion.slice(1);
+  document.getElementById('emotionScore').textContent = `Camera estimate • Smile ratio ${Math.round(face.smileRatio*1000)/1000}`;
+  document.getElementById('emotionReason').textContent = meta.reason;
+  document.getElementById('tip1').textContent = "• " + meta.tips[0];
+  document.getElementById('tip2').textContent = "• " + meta.tips[1];
+  document.getElementById('tip3').textContent = "• " + meta.tips[2];
+  document.getElementById('tipsArea').style.display = 'flex';
+  document.getElementById('confidence').textContent = `Face source: ${face.source} • Smile ratio: ${Math.round(face.smileRatio*1000)/1000}`;
+  window.latestAnalysis = { emotion: face.emotion, faceSmileRatio: face.smileRatio, source: face.source, matchCount: 0, confidence: Math.round(Math.min(95, face.smileRatio*300)) };
+}
+
+/* export & save */
+document.getElementById('exportBtn').addEventListener('click', ()=>{
+  if(!window.latestAnalysis){ alert('Run a face scan first.'); return; }
+  const a = window.latestAnalysis;
+  let out = `AuraLens camera analysis\nMood: ${a.emotion}\nConfidence: ${a.confidence || '—'}%\nFace smile ratio: ${Math.round(a.faceSmileRatio*1000)/1000}\nSource: ${a.source}\n\n(Note: This is a demo heuristic estimate.)`;
+  navigator.clipboard?.writeText(out).then(()=>alert('Analysis copied to clipboard.'));
+});
+
+document.getElementById('saveNote').addEventListener('click', ()=>{
+  if(!window.latestAnalysis){ alert('Run a face scan first.'); return; }
+  const a = window.latestAnalysis;
+  const saved = JSON.parse(localStorage.getItem('auralens_cam_notes')||'[]');
+  saved.push({...a, at: new Date().toISOString()});
+  localStorage.setItem('auralens_cam_notes', JSON.stringify(saved));
+  alert('Saved to local notes (browser storage).');
+});
+
+/* cleanup */
+window.addEventListener('beforeunload', ()=>{ if(stream) stream.getTracks().forEach(t=>t.stop()); });
+
+// enable/disable close button when camera state changes
+const observer = new MutationObserver(()=>{ /* stub for future */ });
+observer.observe(document.getElementById('camPanel'), {attributes:true, childList:true, subtree:true});
+</script>
+</body>
+</html>
+'''
+
+path = Path("/mnt/data/auralens_v3_camera_only.html")
+path.write_text(html, encoding="utf-8")
+str(path)
